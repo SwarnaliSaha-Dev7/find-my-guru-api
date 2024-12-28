@@ -242,7 +242,7 @@ class AdminCourseController extends BaseController
             return $this->sendErrorResponse('Something went wrong.', $th->getMessage(), 500);
         }
     }
-
+    
 
     //===== View course update page
      public function view_course_update(Request $request, $id): JsonResponse
@@ -733,11 +733,11 @@ class AdminCourseController extends BaseController
                     'users.created_at',
                     DB::raw('(SELECT end_date FROM user_subscription_purchase_history as usph WHERE usph.user_id = users.id ORDER BY created_at DESC LIMIT 1) as last_purchase_end_date'),
 
-                    DB::raw('((SELECT COALESCE(SUM(coins_received), 0)
-                    FROM user_coin_purchase_history as ucph
-                    WHERE ucph.user_id = users.id) -
-                    (SELECT COALESCE(SUM(coins_consumed), 0)
-                    FROM user_coin_consumption_history as ucch
+                    DB::raw('((SELECT COALESCE(SUM(coins_received), 0) 
+                    FROM user_coin_purchase_history as ucph 
+                    WHERE ucph.user_id = users.id) - 
+                    (SELECT COALESCE(SUM(coins_consumed), 0) 
+                    FROM user_coin_consumption_history as ucch 
                     WHERE ucch.user_id = users.id)) as remaining_coins')
                 )
                 ->where('users.user_type', '!=', 'admin')
@@ -755,7 +755,7 @@ class AdminCourseController extends BaseController
         }
     }
 
-    //====== Update user details
+    //====== Update user details 
     public function userDetailsInsert(Request $request): JsonResponse
     {
         try {
@@ -771,7 +771,7 @@ class AdminCourseController extends BaseController
                 return $this->sendErrorResponse('Validation Error.', $validator->errors(), 403);
             }
 
-
+            
 
             $path = public_path('uploads/profile_pic');
             if (!file_exists($path)) {
@@ -862,7 +862,7 @@ class AdminCourseController extends BaseController
             return $this->sendErrorResponse('Something went wrong.', $th->getMessage(), 500);
         }
     }
-    //====== Fetch user details
+    //====== Fetch user details 
     public function userDetails(Request $request, $id): JsonResponse
     {
         try {
@@ -896,7 +896,7 @@ class AdminCourseController extends BaseController
             if (!$query) {
                 return $this->sendErrorResponse('Data not found.', '', 404);
             }
-
+            
             $skill = DB::table('user_skills')
                 // ->leftJoin('skills','skills.id','user_skills.skill')
                 // ->select('skills.id as value','skills.name as label')
@@ -950,7 +950,7 @@ class AdminCourseController extends BaseController
         }
     }
 
-    //====== Update user details
+    //====== Update user details 
     public function userDetailsUpdate(Request $request, $id): JsonResponse
     {
         try {
@@ -998,7 +998,7 @@ class AdminCourseController extends BaseController
                 'status' => $request->status,
                 'updated_at' => \Carbon\Carbon::now(),
             ];
-
+            
             //update password
             if($request->password){
                 $updatedData['password'] = bcrypt($request->password);
@@ -1020,7 +1020,7 @@ class AdminCourseController extends BaseController
                 if ($data->profile_pic) {
                     $this->delete_file($data->profile_pic);
                 }
-
+                
                 //update preview profile pic
                 $updatedData['preview_profile_pic'] = $request->preview_profile_pic;
             }
@@ -1087,7 +1087,7 @@ class AdminCourseController extends BaseController
                     $message->from(env('MAIL_FROM_ADDRESS'), "Find My Guru");
                 });
             }
-
+            
             return $this->sendSuccessResponse('User details updated successfully.', '');
         } catch (\Throwable $th) {
             Log::error('User`s details update error: ' . $th->getMessage());
@@ -1095,7 +1095,7 @@ class AdminCourseController extends BaseController
         }
     }
 
-    //====== Delete user record
+    //====== Delete user record 
     public function deleteUser(Request $request, $id): JsonResponse
     {
         try {
@@ -1161,7 +1161,7 @@ class AdminCourseController extends BaseController
             return $this->sendErrorResponse('Something went wrong.', $th->getMessage());
         }
     }
-
+    
 
     //====== Coin purchase details
     public function coinPurchaseDetails(Request $request, $id): JsonResponse
@@ -1186,7 +1186,7 @@ class AdminCourseController extends BaseController
         }
     }
 
-    //====== Delete coin purchase record
+    //====== Delete coin purchase record 
     public function deleteCoinPurchaseRecord(Request $request, $id): JsonResponse
     {
         try {
@@ -1317,7 +1317,7 @@ class AdminCourseController extends BaseController
             return $this->sendErrorResponse('Something went wrong.', $th->getMessage(), 500);
         }
     }
-    //====== Delete subscription purchase record
+    //====== Delete subscription purchase record 
     public function deleteSubscriptionPurchaseRecord(Request $request, $id): JsonResponse
     {
         try {

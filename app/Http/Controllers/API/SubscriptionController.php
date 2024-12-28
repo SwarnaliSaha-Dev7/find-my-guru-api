@@ -26,8 +26,6 @@ class SubscriptionController extends BaseController
             $validator = Validator::make($request->all(), [
                 'user_id' => 'required',
                 'subcription_id' => 'required',
-                'subcription_date' => 'required',
-                'package_name' => 'required',
                 'transuction_id' => 'required',
             ]);
 
@@ -35,22 +33,62 @@ class SubscriptionController extends BaseController
                 return $this->sendErrorResponse('Validation Error.', $validator->errors(), 403);
             }
 
+            $subscription_details = DB::table('subscription_plans')->where('id', $request->subcription_id)->first();
+
+            if (!$subscription_details) {
+                return $this->sendErrorResponse('Subscription plan not found', '', 404);
+            }
+
+            $purchase_history = DB::table('user_subscription_purchase_history as usph')
+            ->where('user_id', $request->user_id)
+            ->orderBy('usph.created_at', 'desc')->first();
+
+            // Calculate start and end dates
+            $start_date = \Carbon\Carbon::now();
+            $duration_in_months = $subscription_details->duration_in_months;
+
+            if ($purchase_history) {
+                $existing_end_date = \Carbon\Carbon::parse($purchase_history->end_date);
+
+                if ($existing_end_date->isFuture()) {
+                    $start_date = \Carbon\Carbon::parse($purchase_history->start_date);
+                    $end_date = $existing_end_date->addMonths($duration_in_months);
+                } else {
+                    $end_date = $start_date->copy()->addMonths($duration_in_months);
+                }
+            } else {
+                $end_date = $start_date->copy()->addMonths($duration_in_months);
+            }
+
+            $paymentData = [
+                'user_id' => $request->user_id,
+                'payment_id' => '1234',
+                'payment_method' => 'Online',
+                'amount' => $request->amount_paid,
+                'status' => 'Success',
+                'transaction_id' => $request->transuction_id,
+                'payment_type' => 'subscription',
+            ];
+
+            $paymentId = DB::table('payment_history')->insertGetId($paymentData);
+
             $insertedData = [
                 'user_id' => $request->user_id,
                 'subcription_id' => $request->subcription_id,
-                'subcription_date' => $request->subcription_date,
-                'package_name' => $request->package_name,
-                'start_date' => $request->start_date,
-                'end_date' => $request->end_date,
-
+                'payment_history_id' => $paymentId,
+                'subcription_date' => \Carbon\Carbon::now(),
+                'package_name' => $subscription_details->title,
+                'start_date' => $start_date,
+                'end_date' => $end_date,
                 'amount_paid' => $request->amount_paid,
                 'gst_amount' => $request->gst_amount,
                 'payment_status' => "Success",
                 'transuction_id' => $request->transuction_id,
-
                 'created_at' => \Carbon\Carbon::now(),
                 'updated_at' => \Carbon\Carbon::now(),
             ];
+
+            //return $this->sendSuccessResponse('Subscription added successfully.', $insertedData);
 
             $storeInfo = DB::table('user_subscription_purchase_history')->insert($insertedData);
 
@@ -169,7 +207,7 @@ class SubscriptionController extends BaseController
         }
     }
 
-    public function coinPurchase(Request $request): JsonResponse
+   public function coinPurchase(Request $request): JsonResponse
     {
         try {
             $validator = Validator::make($request->all(), [
@@ -190,9 +228,22 @@ class SubscriptionController extends BaseController
                 return $this->sendErrorResponse('Coin package not found.', '');
             }
 
+            $paymentData = [
+                'user_id' => $request->user_id,
+                'payment_id' => '1234',
+                'payment_method' => 'Online',
+                'amount' => $request->amount_paid,
+                'status' => 'Success',
+                'transaction_id' => $request->transuction_id,
+                'payment_type' => 'coin',
+            ];
+
+            $paymentId = DB::table('payment_history')->insertGetId($paymentData);
+
             $insertedData = [
                 'user_id' => $request->user_id,
                 'coin_package_id' => $request->coin_package_id,
+                'payment_history_id' => $paymentId,
                 'amount_paid' => $request->amount_paid,
                 'purchase_date' => \Carbon\Carbon::now(),
                 'coins_received' => $request->amount_paid * $package->coin_to_rupee_ratio,
@@ -206,7 +257,6 @@ class SubscriptionController extends BaseController
             $storeInfo = DB::table('user_coin_purchase_history')->insert($insertedData);
 
             $user_details = DB::table('users')->where('id', $request->user_id)->first();
-
 
             $totalCoins = DB::table('user_coin_purchase_history')
                 ->where('user_id', '=', $request->user_id)

@@ -1139,7 +1139,7 @@ class CourseController extends BaseController
             return $this->sendErrorResponse('Something went wrong.', $th->getMessage(), 500);
         }
     }
-
+    
     public function userCourseLead(Request $request, $id): JsonResponse
     {
         try {
@@ -1147,13 +1147,24 @@ class CourseController extends BaseController
             $start_date = $request->input('start_date'); // Optional filter by start_date
             $end_date = $request->input('end_date'); // Optional filter by end_date
             $user_id = $id;
-            $query = DB::table('user_course_student_lead')->where('user_id', $user_id);
 
-            if (!is_null($start_date) && !is_null($end_date)) {
-                $query->whereBetween('created_at', [$start_date, $end_date]);
+            $authUser_id = Auth::user()->id;
+            if ($user_id != $authUser_id) {
+                return $this->sendErrorResponse('Unauthorized request!', '', 401);
             }
 
-            $studentLead = $query->get();
+            $pageNumber = request()->input('page', 1); // Get 'page' parameter from the request, default to 1
+            $perPage = 15;
+            $query = DB::table('user_course_student_lead as ucsl')
+                ->select('ucsl.id','courses.course_name', 'ucsl.student_name', 'ucsl.student_email', 'ucsl.student_phone', 'ucsl.student_message', 'ucsl.tutor_action', 'ucsl.tutor_notes', 'ucsl.created_at',)
+                ->leftJoin('courses', 'ucsl.course_id', '=', 'courses.id')
+                ->where('ucsl.user_id', $user_id);
+
+            if (!is_null($start_date) && !is_null($end_date)) {
+                $query->whereBetween('ucsl.created_at', [$start_date, $end_date]);
+            }
+
+            $studentLead = $query->paginate($perPage, ['*'], 'page', $pageNumber);
 
             return $this->sendSuccessResponse('User students lead fetch successfully.', $studentLead);
         } catch (\Throwable $th) {
@@ -1161,16 +1172,57 @@ class CourseController extends BaseController
             return $this->sendErrorResponse('Something went wrong.', $th->getMessage(), 500);
         }
     }
+    
+    public function updateRemarks(Request $request): JsonResponse
+    {
+        try {
+            $validator = Validator::make($request->all(), [
 
+                'course_lead_id' => 'required',
+                'tutor_notes' => 'required',
+
+            ]);
+
+            if ($validator->fails()) {
+                return $this->sendErrorResponse('Validation Error.', $validator->errors(), 403);
+            }
+
+            $lead_details = DB::table('user_course_student_lead')
+            ->where('id', $request->course_lead_id)->first();
+
+            if (!$lead_details) {
+                return $this->sendErrorResponse('Data not found', '');
+            }
+
+            $updatedData = [
+                'tutor_notes' => $request->tutor_notes,
+                'updated_at' => \Carbon\Carbon::now(),
+            ];
+
+            $storeInfo = DB::table('user_course_student_lead')->where('id', $request->course_lead_id)->update($updatedData);
+            
+            return $this->sendSuccessResponse('Tutor notes updated successfully.', $storeInfo);
+        } catch (\Throwable $th) {
+            Log::error('Tutor notes updated error: ' . $th->getMessage());
+            return $this->sendErrorResponse('Something went wrong.', $th->getMessage(), 500);
+        }
+    }
     public function userCoursePotentialLead(Request $request, $id): JsonResponse
     {
         try {
 
             $user_id = $id;
 
+            $authUser_id = Auth::user()->id;
+            if ($user_id != $authUser_id) {
+                return $this->sendErrorResponse('Unauthorized request!', '', 401);
+            }
+
+            $pageNumber = request()->input('page', 1); // Get 'page' parameter from the request, default to 1
+            $perPage = 15;
             $categoryIds = DB::table('user_course_student_lead')
                 ->where('user_id', '=', $user_id)
-                ->pluck('category_id');
+                ->pluck('category_id')->toArray();
 
             $potentialLeads = DB::table('user_course_student_lead as ucsl')
                 ->select(
@@ -1191,7 +1243,11 @@ class CourseController extends BaseController
                 ->leftJoin('courses', 'ucsl.course_id', '=', 'courses.id')
                 ->leftJoin('courses_skills', 'courses.id', '=', 'courses_skills.course_id')
                 ->leftJoin('skills', 'skills.id', '=', 'courses_skills.skill_name')
-                ->leftJoin('potential_student_unlock_log as psul', 'psul.user_course_student_lead_id', '=', 'ucsl.id')
+                //->leftJoin('potential_student_unlock_log as psul', 'psul.user_course_student_lead_id', '=', 'ucsl.id')
+                ->leftJoin('potential_student_unlock_log as psul', function ($join) use ($user_id) {
+                    $join->on('psul.user_course_student_lead_id', '=', 'ucsl.id')
+                        ->where('psul.user_id', '=', $user_id);
+                })
                 ->whereIn('ucsl.category_id', $categoryIds)
                 ->where('ucsl.user_id', '!=', $user_id)
                 ->where('psul.user_id', '=', $user_id)
@@ -1203,10 +1259,10 @@ class CourseController extends BaseController
                     'ucsl.created_at',
                     'courses.teaching_mode',
                     'country.name',
-                    'city_name',
+                    'cities.name',
                     'psul.unlock_status'
                 )
-                ->get();
+                ->paginate($perPage, ['*'], 'page', $pageNumber);
 
             $totalCoins = DB::table('user_coin_purchase_history')
                 ->where('user_id', '=', $user_id)
@@ -1231,6 +1287,82 @@ class CourseController extends BaseController
             return $this->sendErrorResponse('Something went wrong.', $th->getMessage(), 500);
         }
     }
+    // public function userCoursePotentialLead(Request $request, $id): JsonResponse
+    // {
+    //     try {
+
+    //         $user_id = $id;
+
+    //         $authUser_id = Auth::user()->id;
+    //         if ($user_id != $authUser_id) {
+    //             return $this->sendErrorResponse('Unauthorized request!', '', 401);
+    //         }
+
+    //         $pageNumber = request()->input('page', 1); // Get 'page' parameter from the request, default to 1
+    //         $perPage = 15;
+    //         $categoryIds = DB::table('user_course_student_lead')
+    //             ->where('user_id', '=', $user_id)
+    //             ->pluck('category_id');
+
+    //         $potentialLeads = DB::table('user_course_student_lead as ucsl')
+    //             ->select(
+    //                 'ucsl.id',
+    //                 'ucsl.student_name',
+    //                 'ucsl.student_email',
+    //                 'ucsl.student_phone',
+    //                 'ucsl.created_at',
+    //                 'courses.teaching_mode',
+    //                 'country.name as country',
+    //                 'cities.name as city_name',
+    //                 DB::raw('GROUP_CONCAT(skills.name) as skills'),
+    //                 'psul.unlock_status'
+    //             )
+    //             ->leftJoin('users', 'ucsl.user_id', '=', 'users.id')
+    //             ->leftJoin('cities', 'users.city', '=', 'cities.id')
+    //             ->leftJoin('country', 'users.country', '=', 'country.id')
+    //             ->leftJoin('courses', 'ucsl.course_id', '=', 'courses.id')
+    //             ->leftJoin('courses_skills', 'courses.id', '=', 'courses_skills.course_id')
+    //             ->leftJoin('skills', 'skills.id', '=', 'courses_skills.skill_name')
+    //             ->leftJoin('potential_student_unlock_log as psul', 'psul.user_course_student_lead_id', '=', 'ucsl.id')
+    //             ->whereIn('ucsl.category_id', $categoryIds)
+    //             ->where('ucsl.user_id', '!=', $user_id)
+    //             ->where('psul.user_id', '=', $user_id)
+    //             ->groupBy(
+    //                 'ucsl.id',
+    //                 'ucsl.student_name',
+    //                 'ucsl.student_email',
+    //                 'ucsl.student_phone',
+    //                 'ucsl.created_at',
+    //                 'courses.teaching_mode',
+    //                 'country.name',
+    //                 'city_name',
+    //                 'psul.unlock_status'
+    //             )
+    //             ->paginate($perPage, ['*'], 'page', $pageNumber);
+
+    //         $totalCoins = DB::table('user_coin_purchase_history')
+    //             ->where('user_id', '=', $user_id)
+    //             ->SUM('coins_received');
+
+    //         $totalCoinsConsumed = DB::table('user_coin_consumption_history')
+    //             ->where('user_id', '=', $user_id)
+    //             ->SUM('coins_consumed');
+
+    //         $remainingCoins = $totalCoins - $totalCoinsConsumed;
+
+    //         $data = (object)[
+    //             "potentialLeads" => $potentialLeads,
+    //             "totalCoins" => $totalCoins,
+    //             "totalCoinsConsumed" => $totalCoinsConsumed,
+    //             "remainingCoins" => $remainingCoins
+    //         ];
+
+    //         return $this->sendSuccessResponse('User potential lead fetch successfully.', $data);
+    //     } catch (\Throwable $th) {
+    //         Log::error('User potential lead fetch error: ' . $th->getMessage());
+    //         return $this->sendErrorResponse('Something went wrong.', $th->getMessage(), 500);
+    //     }
+    // }
 
     public function unlockPotentialLead(Request $request): JsonResponse
     {

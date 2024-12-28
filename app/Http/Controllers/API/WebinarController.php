@@ -1002,26 +1002,91 @@ class WebinarController extends BaseController
             return $this->sendErrorResponse('Something went wrong.', $th->getMessage(), 500);
         }
     }
-    
-
-    public function userWebinarLead(Request $request, $id): JsonResponse
+     public function userWebinarLead(Request $request, $id): JsonResponse
     {
         try {
 
             $start_date = $request->input('start_date'); // Optional filter by start_date
             $end_date = $request->input('end_date'); // Optional filter by end_date
             $user_id = $id;
-            $query = DB::table('user_webinar_student_lead')->where('user_id', $user_id);
+
+            $authUser_id = Auth::user()->id;
+            if ($user_id != $authUser_id) {
+                return $this->sendErrorResponse('Unauthorized request!', '', 401);
+            }
+            $pageNumber = request()->input('page', 1); // Get 'page' parameter from the request, default to 1
+            $perPage = 15;
+
+            $query = DB::table('user_webinar_student_lead as uwsl')
+            ->select('uwsl.id', 'uwsl.webinar_title', 'uwsl.student_name', 'uwsl.student_email', 'uwsl.student_phone', 'uwsl.student_message', 'uwsl.tutor_action', 'uwsl.tutor_notes', 'uwsl.created_at')
+            ->where('user_id', $user_id);
 
             if (!is_null($start_date) && !is_null($end_date)) {
                 $query->whereBetween('created_at', [$start_date, $end_date]);
             }
 
-            $studentLead = $query->get();
+            $studentLead = $query->paginate($perPage, ['*'], 'page', $pageNumber);
             return $this->sendSuccessResponse('User students lead fetch successfully.', $studentLead);
         } catch (\Throwable $th) {
             Log::error('Token generation error: ' . $th->getMessage());
             return $this->sendErrorResponse('Something went wrong.', $th->getMessage());
         }
     }
+    
+    
+    public function updateRemarks(Request $request): JsonResponse
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+
+                'webinar_lead_id' => 'required',
+                'tutor_notes' => 'required',
+
+            ]);
+
+            if ($validator->fails()) {
+                return $this->sendErrorResponse('Validation Error.', $validator->errors(), 403);
+            }
+
+            $lead_details = DB::table('user_webinar_student_lead')
+            ->where('id', $request->webinar_lead_id)->first();
+
+            if (!$lead_details) {
+                return $this->sendErrorResponse('Data not found', '');
+            }
+
+            $updatedData = [
+                'tutor_notes' => $request->tutor_notes,
+                'updated_at' => \Carbon\Carbon::now(),
+            ];
+
+            $storeInfo = DB::table('user_webinar_student_lead')->where('id', $request->webinar_lead_id)->update($updatedData);
+
+            return $this->sendSuccessResponse('Tutor notes updated successfully.', $storeInfo);
+        } catch (\Throwable $th) {
+            Log::error('Tutor notes updated error: ' . $th->getMessage());
+            return $this->sendErrorResponse('Something went wrong.', $th->getMessage(), 500);
+        }
+    }
+
+    // public function userWebinarLead(Request $request, $id): JsonResponse
+    // {
+    //     try {
+
+    //         $start_date = $request->input('start_date'); // Optional filter by start_date
+    //         $end_date = $request->input('end_date'); // Optional filter by end_date
+    //         $user_id = $id;
+    //         $query = DB::table('user_webinar_student_lead')->where('user_id', $user_id);
+
+    //         if (!is_null($start_date) && !is_null($end_date)) {
+    //             $query->whereBetween('created_at', [$start_date, $end_date]);
+    //         }
+
+    //         $studentLead = $query->get();
+    //         return $this->sendSuccessResponse('User students lead fetch successfully.', $studentLead);
+    //     } catch (\Throwable $th) {
+    //         Log::error('Token generation error: ' . $th->getMessage());
+    //         return $this->sendErrorResponse('Something went wrong.', $th->getMessage());
+    //     }
+    // }
 }
